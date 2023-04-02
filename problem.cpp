@@ -1,93 +1,51 @@
 #include "problem.h"
 
-void detectStainOnCommonBanknote()
+bool yumiko2::detectBirghtnessChange(Mat templ, Mat sample)
 {
 
-	Mat templ = imread("./Image Source/banknote.jpg", IMREAD_GRAYSCALE);
-	Mat sample = imread("./Image Source/dirty_banknote.jpg", IMREAD_GRAYSCALE);
+	int* template_histogram = getHistogramCount(templ);
+	int* sample_histogram = getHistogramCount(sample);
+	
+	int count = 0;
 
-	Mat result = templ - sample;
-	threshold(result, result, 30, 255, THRESH_BINARY);
-	imshow("template", templ);
-	imshow("sample", sample);
-	imshow("result", result);
+	for (int i = 5; i < HISTOGRAM - 5; i++) {
+		if (abs(template_histogram[i] - sample_histogram[i]) >= 0.02 * template_histogram[i]) count++;
+	}
+	
+	return count >= 200;
 }
 
-void detectStainOnHalfBirghtnessBanknote()
+int yumiko2::detectOrientation(Mat templ, Mat sample)
 {
-
-	Mat templ = imread("./Image Source/banknote.jpg", IMREAD_GRAYSCALE);
-	Mat sample = imread("./Image Source/dirty_half_brightness_banknote.jpg", IMREAD_GRAYSCALE);
-
-	scaleHistogram(sample, (double) getMaxPixel(templ) / getMaxPixel(sample));
-	Mat result = templ - sample;
-	threshold(result, result, 30, 255, THRESH_BINARY);
-	//imwrite("result_brightness_1.jpg", result);
-	imshow("template", templ);
-	imshow("sample", sample);
-	imshow("result", result);
-
+	Mat shape;
+	threshold(sample, shape, 250, 255, THRESH_BINARY);
+	Point2i top = getTopLeanPoint(shape);
+	Point2i bot = getBotLeanPoint(shape);
+	if (top.x == 0 && top.y == 0) return 0;
+	return (top.y < bot.y?1:-1)*nearbyint((atan((double)abs(top.x - bot.x) / abs(top.y - bot.y)) - atan((double)templ.rows / templ.cols)) / CV_PI * 180);
 }
 
-void detectStainOnRotatedBanknote()
+double yumiko2::detectSizeDiff(Mat templ, Mat sample)
 {
+	Mat shape;
+	threshold(sample, shape, 250, 255, THRESH_BINARY);
+	Point2i tl = getTopLeft(shape);
+	Point2i tr = getTopRight(shape);
 
-	Mat templ = imread("./Image Source/banknote.jpg", IMREAD_GRAYSCALE);
-	Mat sample = imread("./Image Source/rotated_36_dirty_banknote.jpg", IMREAD_GRAYSCALE);
-	imshow("pre_crop_sample.jpg", sample);
-	sample = rotate(sample, getRotateAngle(getTopLeft(sample), getTopRight(sample)));
-	sample = getTemplateArea(sample, templ);
-
-	Mat result = templ - sample;
-	result = yumiko::medianFilter(result);
-	threshold(result, result, 60, 255, THRESH_BINARY);
-	imshow("template", templ);
-	imshow("after_crop_sample", sample);
-	imshow("result", result);
+	return (double)(tr.y - tl.y) / templ.cols;
 }
 
-void detectStainOnResizedBanknote()
+bool yumiko2::detectTorn(Mat sample)
 {
-	//if you want to check the case that small image upscale to large image, change large_200 to small_50 
-	Mat templ = imread("./Image Source/banknote.jpg", IMREAD_GRAYSCALE);
-	Mat sample = imread("./Image Source/large_200_dirty_banknote.jpg", IMREAD_GRAYSCALE);
-	imshow("sample_origin", sample);
+	Mat shape;
+	threshold(sample, shape, 250, 255, THRESH_BINARY_INV);
 
-	resize(sample, sample, Size(templ.cols, templ.rows), INTER_LINEAR);
-	Mat result = templ - sample;
-	imshow("raw_result", result);
+	int count = 0;
+	for (int i = 0;i < shape.rows;i++)
+		for (int j = 0; j < shape.cols; j++) {
+			if (shape.at<uchar>(i, j) <= 10) count++;
+		}
 
-	result = yumiko::medianFilter(result);
-	imshow("after_median", result);
-
-	threshold(result, result, 60, 255, THRESH_BINARY);
-	imshow("template", templ);
-	imshow("sample_resized", sample);
-	imshow("result", result);
+	return count > (double) 0.2 * shape.cols * shape.rows;
 }
 
-void restoreIncompleteBanknote()
-{
-
-	Mat templ = imread("./Image Source/banknote.jpg", IMREAD_GRAYSCALE);
-	imshow("template", templ);
-	Mat sample = imread("./Image Source/torn_dirty_banknote.jpg", IMREAD_GRAYSCALE);
-	imshow("sample", sample);
-
-	Mat sample_clone = sample.clone();
-
-	threshold(sample_clone, sample_clone, 250, 255, THRESH_BINARY_INV);
-
-	threshold(sample, sample, 250, 0, THRESH_TOZERO_INV);
-
-	Mat missingPieces = templ - sample_clone;
-	Mat result = sample + missingPieces;
-	imshow("raw_result", result);
-	result = yumiko::medianFilter(result);
-	imshow("after_median_result", result);
-	result = yumiko::usm(result, 1, 0.5, 5);
-	imshow("after_usm", result);
-	// enhanced 
-	result = result + (templ - result);
-	imshow("result", result);
-}
